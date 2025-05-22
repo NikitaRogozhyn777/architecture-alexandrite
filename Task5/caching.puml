@@ -1,0 +1,34 @@
+@startuml Александрит - Кеширование заказов в MES
+participant "Клиент (Оператор)" as Client
+participant "Frontend (React)" as Frontend
+participant "Backend (C#)" as Backend
+participant "Кеш (Redis)" as Cache
+participant "БД (PostgreSQL)" as DB
+
+== Чтение списка заказов (Cache-Aside) ==
+
+Client -> Frontend: Запрос списка заказов
+Frontend -> Backend: GET /api/orders?status=active
+Backend -> Cache: Проверка наличия данных (ключ: "orders:active")
+alt Данные есть в кеше
+    Cache --> Backend: Возвращает закешированный список
+    Backend --> Frontend: Отдает список заказов
+else Данных нет в кеше
+    Backend -> DB: SELECT * FROM orders WHERE status = 'ACTIVE'
+    DB --> Backend: Возвращает данные
+    Backend -> Cache: Сохраняет данные (TTL=60s)
+    Backend --> Frontend: Отдает список заказов
+end
+Frontend --> Client: Отображает список
+
+== Изменение статуса заказа (Инвалидация кеша) ==
+
+Client -> Frontend: Изменяет статус заказа
+Frontend -> Backend: PATCH /api/orders/{id} {status: "MANUFACTURING_STARTED"}
+Backend -> DB: UPDATE orders SET status = ... WHERE id = ...
+DB --> Backend: Подтверждение
+Backend -> Cache: Удаляет ключи "orders:*" и "order:{id}"
+Backend --> Frontend: Подтверждение изменения
+Frontend --> Client: Обновление интерфейса
+
+@enduml
